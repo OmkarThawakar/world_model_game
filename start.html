@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Platformer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="main-container">
+        <header>
+            <h1>NEON JUMPER</h1>
+            <div id="hud">
+                <span id="lives-display">Lives: 3</span> | <span id="level-display">Level: 1</span>
+            </div>
+        </header>
+
+        <div id="game-wrapper">
+            <div id="overlay" class="hidden">
+                <h2 id="overlay-message">Game Over</h2>
+                <p>Press ESC to Restart</p>
+            </div>
+            <!-- Game canvas will be injected here -->
+        </div>
+
+        <footer>
+            <p>Arrows to Move • ESC to Pause/Restart</p>
+        </footer>
+    </div>
+
+    <script src="js/lmm_ai.js"></script>
+    <script src="js/game_script.js"></script>
+
+</body>
+
+</html>
