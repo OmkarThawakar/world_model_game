@@ -450,6 +450,7 @@ function runGame(plans, Display) {
             startLevel(n, lives - 1);
           } else {
             showOverlay("GAME OVER", true);
+            if (window.gameRecorder) window.gameRecorder.saveHistory();
             setTimeout(function () {
               showOverlay("", false);
               startLevel(0, 3); // Restart from beginning? Or reset logic?

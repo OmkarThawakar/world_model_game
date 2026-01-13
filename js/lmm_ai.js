@@ -52,6 +52,28 @@ class GameRecorder {
             events: this.events
         };
     }
+
+    async saveHistory() {
+        const data = {
+            ...this.getSummary(),
+            history: this.history
+        };
+
+        try {
+            console.log("[Recorder] Saving history...", data);
+            const response = await fetch('/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            console.log("[Recorder] Save result:", result);
+        } catch (e) {
+            console.error("[Recorder] Failed to save history:", e);
+        }
+    }
 }
 
 // --- LMM WORLD MODEL AGENT ---

@@ -1,0 +1,7 @@
+{
+    "name": "world-model-game",
+    "version": "1.0.0",
+    "scripts": {
+        "dev": "python3 server.py"
+    }
+}
