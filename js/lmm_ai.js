@@ -21,16 +21,15 @@ class GameRecorder {
     }
 
     // Called every frame
-    recordFrame(player, inputKeys) {
+    recordFrame(level, inputKeys) {
         // Record sparse data to save memory
         // Only record if input changes or significant position change? 
         // For now, record every 10th frame or similar? No, full resolution analysis for AI might be needed.
         // Let's stick to basic periodic snapshots.
         this.history.push({
             t: Date.now() - this.startTime,
-            x: Math.round(player.pos.x * 100) / 100,
-            y: Math.round(player.pos.y * 100) / 100,
-            state: player.state,
+            visual_state: level.getSnapshot(),
+            state: level.player.state,
             input: { ...inputKeys } // Snapshot of keys
         });
     }
@@ -80,33 +79,138 @@ class GameRecorder {
 class LMMAgent {
     constructor() {
         this.difficultyTier = 1;
+        this.physicsKnowledge = `
+You are the Architect of a 2D Platformer World.
+Your goal is to design levels that test the player's understanding of this world's physics.
+
+### WORLD PHYSICS & LAWS
+1. **Gravity**: Acts downwards (Y+). The player falls if no block ('x') is beneath them.
+2. **Movement**: 
+   - Player ('@') moves Left/Right with velocity. 
+   - Jump: Impulse 'Up' (Y-). requires ground contact.
+   - Air Control: Movement is possible while airborne but momentum is conserved.
+3. **Collision**:
+   - 'x' (Wall/Floor): Solid blocks. Blocks movement.
+   - '!' (Lava): Fatal on contact. Resets level/Life lost.
+   - 'o' (Coin): Collectible.
+   - ' ' (Empty): Passable air.
+4. **Dynamics**:
+   - Moving Lava ('=', '|', 'v'): Predictable linear motion.
+   - Wobble: Coins float and wobble slightly.
+
+### GRID SYMBOLOGY
+- @ : Player Start (Required)
+- x : Solid Block (Walls, Floor, Platforms)
+- ! : Static Lava (Hazard)
+- = : Horizontal Moving Lava
+- | : Vertical Moving Lava
+- v : Dripping Lava
+- o : Coin (Goal/Objective)
+-   : Empty Space
+`;
+    }
+
+    /**
+     * Learning Step: Updates the Physics Knowledge based on observations.
+     */
+    learnFromHistory(historySummary, outcome) {
+        let observation = "";
+        const events = historySummary.events || [];
+        const deaths = events.filter(e => e.type === 'death').length;
+        const duration = historySummary.duration || 0;
+
+        if (outcome === 'win') {
+            observation = `[OBSERVATION: Player Mastered this Level. Duration: ${duration.toFixed(1)}s. Deaths: ${deaths}. Conclusion: Physics laws concerning jump arc and gravity are understood.]`;
+        } else {
+            observation = `[OBSERVATION: Player Failed Level. Duration: ${duration.toFixed(1)}s. Deaths: ${deaths}. Conclusion: Player struggled with environmental hazards. Potentially miscalculated gravity or collision bounds.]`;
+        }
+
+        // Simulating "Learning" by appending new knowledge
+        this.physicsKnowledge += "\n" + observation;
+    }
+
+    printEpisodeSummary(historySummary, outcome) {
+        console.log("==========================================");
+        console.log(`          EPISODE SUMMARY (${outcome.toUpperCase()})          `);
+        console.log("==========================================");
+        const summaryText = `Result: ${outcome.toUpperCase()}\nDuration: ${historySummary.duration.toFixed(2)}s\nEvents: ${historySummary.events.length} (Deaths: ${historySummary.events.filter(e => e.type === 'death').length})`;
+
+        console.log(summaryText);
+
+        // Update Dashboard UI
+        const dashboard = document.getElementById('game-dashboard');
+        const summaryDisplay = document.getElementById('level-summary');
+        const physicsDisplay = document.getElementById('physics-laws-display');
+        const physicsSection = document.getElementById('physics-section');
+
+        if (dashboard && summaryDisplay) {
+            dashboard.classList.remove('hidden');
+            summaryDisplay.textContent = summaryText;
+
+            // Show Physics Laws if Game Over or specifically requested
+            if (outcome === 'loss' || outcome === 'win') {
+                if (physicsSection && physicsDisplay) {
+                    physicsSection.classList.remove('hidden');
+                    physicsDisplay.textContent = this.physicsKnowledge;
+                }
+            } else {
+                if (physicsSection) physicsSection.classList.add('hidden');
+            }
+        }
+
+        if (outcome === 'loss') {
+            console.log("\n>>> UPDATED WORLD LAWS (LEARNED) <<<");
+            console.log(this.physicsKnowledge);
+        }
+        console.log("==========================================");
     }
 
     /**
      * Generates the next level based on user history.
      * @param {Object} historySummary - Summary from GameRecorder
+     * @param {Object} lastResult - { outcome: 'win' | 'loss' }
      * @returns {Promise<Array<string>>} - A promise resolving to the Level Plan (array of strings)
      */
-    async generateNextLevel(historySummary) {
+    async generateNextLevel(historySummary, lastResult) {
         console.log("[LMM Agent] Analyzing user history...", historySummary);
 
-        // --- MOCK LMM LOGIC ---
-        // In a real implementation, this would send 'historySummary' (JSON) to an LLM endpoint.
-        // The LLM would return a Grid representation of the level.
+        // 1. Learn from previous episode
+        this.learnFromHistory(historySummary, lastResult.outcome);
+
+        // 2. Print Summary
+        this.printEpisodeSummary(historySummary, lastResult.outcome);
+
+        // --- DIFFICULTY ADJUSTMENT ---
+        if (lastResult.outcome === 'win') {
+            this.difficultyTier++;
+            console.log(`[LMM Agent] Player Won! Increasing difficulty to Tier ${this.difficultyTier}`);
+        } else if (lastResult.outcome === 'loss') {
+            this.difficultyTier = Math.max(1, this.difficultyTier - 1);
+            console.log(`[LMM Agent] Player struggled. Decreasing difficulty to Tier ${this.difficultyTier}`);
+        }
+
+        // --- WORLD MODEL PROMPT CONSTRUCTION ---
+        const prompt = `
+${this.physicsKnowledge}
+
+CURRENT CONTEXT:
+- Difficulty Tier: ${this.difficultyTier}
+- Player Status: ${lastResult.outcome === 'win' ? "Successfully mastered previous physics constraints." : "Failed to overcome environment challenges."}
+- Last Metadata: Duration ${historySummary?.duration}s, Events: ${JSON.stringify(historySummary?.events)}
+
+TASK:
+Based on the Updated Laws of Physics (above) and the player's performance, generate a new 2D grid level.
+${lastResult.outcome === 'win'
+                ? "CONSTRAINT: Introduce more complex arrangements of 'x' (walls) and '!' (lava) that require precise jump timing."
+                : "CONSTRAINT: Simplify the terrain. Reduce gap widths and lava hazards to allow for safer traversal."}
+`;
+
+        console.log("--- GENERATED WORLD MODEL PROMPT ---");
+        console.log(prompt);
+        console.log("------------------------------------");
 
         // Simulate "Thinking" delay
         await new Promise(r => setTimeout(r, 1000));
-
-        this.difficultyTier++;
-        console.log(`[LMM Agent] Generating Level Tier ${this.difficultyTier}...`);
-
-        // Heuristic: If they died a lot (Event type 'death'), keep difficulty same.
-        // If they breezed through, increase.
-        const deaths = historySummary.events.filter(e => e.type === 'death').length;
-        if (deaths > 2) {
-            console.log("[LMM Agent] Player struggled. Simplifying next level...");
-            this.difficultyTier = Math.max(1, this.difficultyTier - 1);
-        }
 
         return this.proceduralGen(this.difficultyTier);
     }

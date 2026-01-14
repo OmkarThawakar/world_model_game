@@ -193,6 +193,7 @@ Player.prototype.act = function (step, level, keys) {
 //lava objects
 function Lava(pos, ch) {
   this.pos = pos;
+  this.ch = ch; // Store character for serialization
   this.size = new Vector(1, 1);
   if (ch == "=") {
     this.speed = new Vector(2, 0);
@@ -213,6 +214,42 @@ Lava.prototype.act = function (step, level) {
   else
     this.speed = this.speed.times(-1);
 };
+
+// Serializes the current level state to an ASCII grid (Array of strings)
+Level.prototype.getSnapshot = function () {
+  var rows = [];
+  // 1. Render static grid
+  for (var y = 0; y < this.height; y++) {
+    var line = "";
+    for (var x = 0; x < this.width; x++) {
+      var type = this.grid[y][x];
+      if (type == "wall") line += "x";
+      else if (type == "lava") line += "!"; // Static lava
+      else line += " ";
+    }
+    rows.push(line.split("")); // Convert to array of chars for mutable modification
+  }
+
+  // 2. Overlay actors
+  this.actors.forEach(function (actor) {
+    // Determine grid position (center or top-left?)
+    // Using rounded position for visual approximation
+    var gx = Math.round(actor.pos.x);
+    var gy = Math.round(actor.pos.y);
+
+    if (gx >= 0 && gx < this.width && gy >= 0 && gy < this.height) {
+      var char = "?";
+      if (actor.type == "player") char = "@";
+      else if (actor.type == "coin") char = "o";
+      else if (actor.type == "lava") char = actor.ch || "!";
+
+      rows[gy][gx] = char;
+    }
+  }, this);
+
+  return rows.map(function (r) { return r.join(""); });
+};
+
 //coin objects
 function Coin(pos) {
   this.basePos = this.pos = pos.plus(new Vector(0.2, 0.1));
@@ -352,8 +389,9 @@ function runLevel(level, Display, andThen) {
   var display = new Display(parent, level);
   var running = "yes";
 
-  // Start Recording
-  if (window.gameRecorder) window.gameRecorder.start();
+  var running = "yes";
+
+  // Start Recording moved to startLevel to persist across retries
 
   function handleEscKey(event) {
     if (event.keyCode == 27) { // ESC's key code is 27
@@ -381,7 +419,7 @@ function runLevel(level, Display, andThen) {
 
     // Record Frame
     if (window.gameRecorder) {
-      window.gameRecorder.recordFrame(level.player, arrows);
+      window.gameRecorder.recordFrame(level, arrows);
     }
 
     display.drawFrame(step);
@@ -405,62 +443,108 @@ function updateHUD(lives, level) {
   if (levelDisplay) levelDisplay.textContent = "Level: " + (level + 1);
 }
 
-function showOverlay(message, isShown) {
+function showOverlay(message, isShown, isLoading) {
   var overlay = document.getElementById('overlay');
   var overlayMsg = document.getElementById('overlay-message');
+  var loadingContainer = document.getElementById('loading-container');
+  var loadingStatus = document.getElementById('loading-status');
+  var dashboard = document.getElementById('game-dashboard');
+
   if (overlay && overlayMsg) {
     if (isShown) {
-      overlayMsg.textContent = message;
+      // If isLoading is true, show the loading container and hide the main title/message
+      // Also hide the dashboard during loading (it might have old stats)
+      if (isLoading) {
+        overlayMsg.classList.add('hidden');
+        document.getElementById('overlay-title').classList.add('hidden');
+        loadingContainer.classList.remove('hidden');
+        if (dashboard) dashboard.classList.add('hidden');
+        if (loadingStatus) loadingStatus.textContent = message || "Loading...";
+      } else {
+        // Standard Game Over or Message (Dashboard might be shown by other logic, e.g. LMM Agent)
+        overlayMsg.classList.remove('hidden');
+        document.getElementById('overlay-title').classList.remove('hidden');
+        loadingContainer.classList.add('hidden');
+        overlayMsg.textContent = message;
+      }
       overlay.classList.remove('hidden');
     } else {
       overlay.classList.add('hidden');
+      if (dashboard) dashboard.classList.add('hidden'); // Reset dashboard visibility
     }
   }
 }
 
 function runGame(plans, Display) {
-  // We keep the original 'plans' as the starting set.
-  // When we run out, we ask LMM for more.
+  // We start with the manually defined plans for Level 1
+  // Subsequent levels are AI generated
 
-  function startLevel(n, lives) {
+  function startLevel(n, lives, levelPlan) {
+    if (lives === 3 && window.gameRecorder) {
+      window.gameRecorder.start();
+    }
+    console.log(`[Game] Starting Level ${n} with ${lives} lives. Plan provided: ${!!levelPlan}`);
     updateHUD(lives, n);
 
-    // Check if we need to generate a level
     var levelPlanPromise;
-    if (n < plans.length) {
+    if (levelPlan) {
+      // If a specific plan is passed (e.g. generated from loss), use it
+      console.log("[Game] Using provided level plan.");
+      levelPlanPromise = Promise.resolve(levelPlan);
+    } else if (n < plans.length) {
+      console.log("[Game] Using pre-defined level plan.");
       levelPlanPromise = Promise.resolve(plans[n]);
     } else {
-      // Ask LMM for a new level
-      showOverlay("AI GENERATING LEVEL...", true);
+      // Ask LMM for a new level (Win case usually)
+      console.log("[Game] Asking AI for new level (Win flow).");
+      showOverlay("World Model Evolving...", true, true); // Show Loading
       var history = window.gameRecorder ? window.gameRecorder.getSummary() : {};
-      levelPlanPromise = window.lmmAgent.generateNextLevel(history)
+      // Assume win if we got here via progression
+      levelPlanPromise = window.lmmAgent.generateNextLevel(history, { outcome: 'win' })
         .then(function (newPlan) {
+          console.log("[Game] AI generated new plan.");
           showOverlay("", false);
-          // plans.push(newPlan); // Optionally save it
           return newPlan;
         });
     }
 
     levelPlanPromise.then(function (currentPlan) {
+      console.log("[Game] Running level...");
       runLevel(new Level(currentPlan), Display, function (status) {
+        console.log(`[Game] Level finished with status: ${status}`);
         if (status == "lost") {
           if (window.gameRecorder) window.gameRecorder.logEvent('death', { level: n });
 
           if (lives > 0) {
-            startLevel(n, lives - 1);
+            console.log("[Game] Retrying level...");
+            startLevel(n, lives - 1, currentPlan); // Retry same level
           } else {
-            showOverlay("GAME OVER", true);
+            console.log("[Game] Game Over. Triggering evolution (Loss flow).");
+            showOverlay("Absorbing Experience...", true, true); // Show Loading
             if (window.gameRecorder) window.gameRecorder.saveHistory();
-            setTimeout(function () {
-              showOverlay("", false);
-              startLevel(0, 3); // Restart from beginning? Or reset logic?
-            }, 2000);
+
+            // Generate EASIER level on Game Over
+            var history = window.gameRecorder ? window.gameRecorder.getSummary() : {};
+            window.lmmAgent.generateNextLevel(history, { outcome: 'loss' })
+              .then(function (easierPlan) {
+                console.log("[Game] AI generated easier plan.");
+                setTimeout(function () {
+                  showOverlay("", false);
+                  // Restart at same level index 'n' but with simpler plan? 
+                  // Or maybe decrement level index? Let's keep index but simplify.
+                  startLevel(n, 3, easierPlan);
+                }, 2000);
+              });
           }
         } else { // "won"
-          // Proceed to next level (which might trigger LMM)
-          startLevel(n + 1, lives);
+          console.log("[Game] Level Won! Advancing...");
+          // Proceed to next level (triggered AI generation)
+          if (window.gameRecorder) window.gameRecorder.saveHistory(); // Save winning run too
+          startLevel(n + 1, 3);
         }
       });
+    }).catch(function (err) {
+      console.error("[Game] Error starting level:", err);
     });
   }
   startLevel(0, 3);
