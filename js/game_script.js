@@ -103,6 +103,7 @@ Level.prototype.playerTouched = function (type, actor) {
     this.status = "lost";
     this.finishDelay = 1;
   } else if (type == "coin") {
+    if (window.gameRecorder) window.gameRecorder.logEvent('coin', { pos: actor.pos });
     this.actors = this.actors.filter(function (other) {
       return other != actor;
     });
@@ -513,7 +514,12 @@ function runGame(plans, Display) {
       runLevel(new Level(currentPlan), Display, function (status) {
         console.log(`[Game] Level finished with status: ${status}`);
         if (status == "lost") {
-          if (window.gameRecorder) window.gameRecorder.logEvent('death', { level: n });
+          console.log(`[Game] Player died. Lives remaining: ${lives}. Checking recorder:`, !!window.gameRecorder);
+          if (window.gameRecorder) {
+            window.gameRecorder.logEvent('death', { level: n });
+          } else {
+            console.error("[Game] CRITICAL: window.gameRecorder is undefined!");
+          }
 
           if (lives > 0) {
             console.log("[Game] Retrying level...");

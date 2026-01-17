@@ -14,33 +14,45 @@
     <div class="main-container">
         <header>
             <h1>Self Evolving Jumper World</h1>
+            <p class="description-text">
+                Welcome to a self-evolving game world where our advanced World Model AI dynamically creates and evolves the levels.<br>
+                It learns physical laws from your interactions and adapts the challenge in real-time.
+            </p>
             <div id="hud">
                 <span id="lives-display">Lives: 3</span> | <span id="level-display">Level: 1</span>
             </div>
         </header>
 
-        <div id="game-wrapper">
-            <div id="overlay" class="hidden">
-                <h2 id="overlay-title">Game Over</h2>
-                <div id="game-dashboard" class="hidden"
-                    style="text-align: left; max-width: 600px; margin: 20px auto; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;">
-                    <h3 style="color: #4CAF50;">Mission Report</h3>
-                    <pre id="level-summary" style="color: #ddd; font-size: 14px; white-space: pre-wrap;"></pre>
-                    <div id="physics-section" class="hidden">
-                        <h3 style="color: #2196F3; margin-top: 15px;">World Model Physics (Evolving)</h3>
-                        <pre id="physics-laws-display"
-                            style="color: #aaf; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto;"></pre>
+        <div class="game-container">
+            <div id="game-wrapper">
+                <div id="overlay" class="hidden">
+                    <h2 id="overlay-title">Game Over</h2>
+                    <!-- Dashboard moved out of overlay -->
+                    <p id="overlay-message">Press ESC to Restart</p>
+                    <div id="loading-container" class="hidden">
+                        <div id="loading-bar">
+                            <div id="loading-progress"></div>
+                        </div>
+                        <p id="loading-status">Synchronizing...</p>
                     </div>
                 </div>
-                <p id="overlay-message">Press ESC to Restart</p>
-                <div id="loading-container" class="hidden">
-                    <div id="loading-bar">
-                        <div id="loading-progress"></div>
-                    </div>
-                    <p id="loading-status">Synchronizing...</p>
+                <!-- Game canvas will be injected here -->
+            </div>
+        </div>
+
+        <div id="live-dashboard">
+            <div class="dashboard-panel" id="events-panel">
+                <h3>Recorded Events (Live)</h3>
+                <div class="panel-content" id="events-stream">
+                    <!-- Event cards will be injected here -->
                 </div>
             </div>
-            <!-- Game canvas will be injected here -->
+            <div class="dashboard-panel" id="reasoning-panel">
+                <h3>World Model Reasoning</h3>
+                <div class="panel-content" id="reasoning-stream">
+                    <div class="reasoning-item system-msg">Initializing World Model...</div>
+                </div>
+            </div>
         </div>
 
         <footer>

@@ -146,10 +146,11 @@ footer {
 
 .coin {
   background: gold;
-  border-radius: 50%;
+  border-radius: 0%;
+  /* Changed to square as requested */
   border: 2px solid #F57F17;
   box-sizing: border-box;
-  animation: spin-coin 1s infinite linear;
+  /* animation: spin-coin 1s infinite linear; Removed to stop zoom effect */
   transform-origin: center;
 }
 
@@ -191,7 +192,7 @@ footer {
 .player::after {
   content: "🧍";
   /* Standing Person */
-  animation: breathe 2s infinite ease-in-out;
+  /* animation: breathe 2s infinite ease-in-out; Removed to stop zoom effect */
 }
 
 /* Run State */
@@ -261,4 +262,111 @@ footer {
 .won .player::after {
   content: "🏆";
   /* Trophy or Happy */
+}
+
+/* Description Text */
+.description-text {
+  font-size: 1rem;
+  color: #777;
+  max-width: 800px;
+  margin: 10px auto;
+  line-height: 1.5;
+}
+
+/* Dashboard Layout */
+#live-dashboard {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 20px auto;
+  width: 100%;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
+.dashboard-panel {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.85);
+  /* Dark background for tech feel */
+  border: 1px solid var(--accent-blue);
+  border-radius: 8px;
+  padding: 15px;
+  color: #fff;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard-panel h3 {
+  margin-top: 0;
+  border-bottom: 2px solid #555;
+  padding-bottom: 10px;
+  font-size: 1.1rem;
+  color: var(--accent-green);
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  /* Monospace for logs */
+  font-size: 0.9rem;
+  padding-top: 10px;
+}
+
+/* Scrollbar for panels */
+.panel-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.panel-content::-webkit-scrollbar-track {
+  background: #222;
+}
+
+.panel-content::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+/* Event Items */
+.event-item {
+  border-left: 3px solid var(--accent-blue);
+  background: rgba(33, 150, 243, 0.1);
+  margin-bottom: 8px;
+  padding: 8px;
+}
+
+.event-item.death {
+  border-left-color: var(--accent-red);
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.event-data {
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+/* Reasoning Items */
+.reasoning-item {
+  margin-bottom: 12px;
+  line-height: 1.4;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+}
+
+.reasoning-item.physics-law {
+  color: #FFEB3B;
+  font-weight: bold;
+}
+
+.reasoning-item.observation {
+  color: #64B5F6;
+}
+
+.system-msg {
+  color: #aaa;
+  font-style: italic;
 }

@@ -1,5 +1,4 @@
 "use strict";
-
 /**
  * LMM Agent System
  * Handles telemetry recording and AI level generation
@@ -22,16 +21,21 @@ class GameRecorder {
 
     // Called every frame
     recordFrame(level, inputKeys) {
-        // Record sparse data to save memory
-        // Only record if input changes or significant position change? 
-        // For now, record every 10th frame or similar? No, full resolution analysis for AI might be needed.
-        // Let's stick to basic periodic snapshots.
-        this.history.push({
-            t: Date.now() - this.startTime,
-            visual_state: level.getSnapshot(),
-            state: level.player.state,
-            input: { ...inputKeys } // Snapshot of keys
-        });
+        // Check for active input
+        const hasInput = Object.values(inputKeys).some(k => k === true);
+
+        // Check for movement (using a small threshold for floating point errors)
+        const speed = level.player.speed;
+        const isMoving = Math.abs(speed.x) > 0.01 || Math.abs(speed.y) > 0.01;
+
+        if (hasInput || isMoving) {
+            this.history.push({
+                t: Date.now() - this.startTime,
+                visual_state: level.getSnapshot(),
+                state: level.player.state,
+                input: { ...inputKeys }
+            });
+        }
     }
 
     logEvent(type, data) {
@@ -41,6 +45,55 @@ class GameRecorder {
             data: data
         });
         console.log(`[Recorder] Event: ${type}`, data);
+
+        // Update Dashboard
+        this.displayEventOnDashboard(type, data);
+    }
+
+    displayEventOnDashboard(type, data) {
+        const stream = document.getElementById('events-stream');
+        if (!stream) return;
+
+        const el = document.createElement('div');
+        el.className = `event-item ${type}`;
+
+        let icon = "📌";
+        if (type === 'death') icon = "💀";
+        if (type === 'level_complete') icon = "🏁";
+
+        // Format Data nicely
+        let details = "";
+        let visualState = ""; // string representation of grid
+
+        if (type === 'death') {
+            details = `Level ${data.level}`;
+        } else if (type === 'coin') {
+            details = `Pos: (${data.pos.x.toFixed(1)}, ${data.pos.y.toFixed(1)})`;
+        } else {
+            details = JSON.stringify(data);
+        }
+
+        // Get recent history (context)
+        if (this.history.length > 0) {
+            const lastFrame = this.history[this.history.length - 1];
+            // Format visual state as ASCII block
+            if (lastFrame.visual_state && Array.isArray(lastFrame.visual_state)) {
+                visualState = lastFrame.visual_state.join('\n');
+            }
+        }
+
+        const timestamp = ((Date.now() - this.startTime) / 1000).toFixed(1);
+
+        el.style.fontFamily = "'Courier New', monospace";
+        el.style.marginBottom = "10px";
+        el.style.borderBottom = "1px solid #333";
+        el.style.paddingBottom = "5px";
+
+        el.innerHTML = `
+            <div><span style="color: #888;">[${timestamp}s]</span> <strong>${type.toUpperCase()}</strong> ${details}</div>
+            ${visualState ? `<pre style="font-size: 0.6em; line-height: 1em; color: #aaa; overflow-x: auto;">${visualState}</pre>` : ''}
+        `;
+        stream.prepend(el); // Newest first
     }
 
     getSummary() {
@@ -110,6 +163,17 @@ Your goal is to design levels that test the player's understanding of this world
 `;
     }
 
+    appendReasoning(text, type = "normal") {
+        const stream = document.getElementById('reasoning-stream');
+        if (!stream) return;
+
+        const el = document.createElement('div');
+        el.className = `reasoning-item ${type}`;
+        el.innerText = `> ${text}`;
+        stream.appendChild(el);
+        stream.scrollTop = stream.scrollHeight; // Auto-scroll
+    }
+
     /**
      * Learning Step: Updates the Physics Knowledge based on observations.
      */
@@ -125,6 +189,10 @@ Your goal is to design levels that test the player's understanding of this world
             observation = `[OBSERVATION: Player Failed Level. Duration: ${duration.toFixed(1)}s. Deaths: ${deaths}. Conclusion: Player struggled with environmental hazards. Potentially miscalculated gravity or collision bounds.]`;
         }
 
+        // Dashboard Update
+        this.appendReasoning(`Analysing Episode... Outcome: ${outcome}`, "system-msg");
+        this.appendReasoning(observation, "observation");
+
         // Simulating "Learning" by appending new knowledge
         this.physicsKnowledge += "\n" + observation;
     }
@@ -137,11 +205,16 @@ Your goal is to design levels that test the player's understanding of this world
 
         console.log(summaryText);
 
-        // Update Dashboard UI
+        // Show update in Reasoning Panel
+        this.appendReasoning("Episode Complete. Summary: " + summaryText.replace(/\n/g, ", "));
+
+        // Update Dashboard UI (Legacy Overlay)
         const dashboard = document.getElementById('game-dashboard');
         const summaryDisplay = document.getElementById('level-summary');
         const physicsDisplay = document.getElementById('physics-laws-display');
         const physicsSection = document.getElementById('physics-section');
+        // ... (rest of legacy UI code can remain or be cleaned up, but keeping for now as backup)
+
 
         if (dashboard && summaryDisplay) {
             dashboard.classList.remove('hidden');
@@ -183,10 +256,10 @@ Your goal is to design levels that test the player's understanding of this world
         // --- DIFFICULTY ADJUSTMENT ---
         if (lastResult.outcome === 'win') {
             this.difficultyTier++;
-            console.log(`[LMM Agent] Player Won! Increasing difficulty to Tier ${this.difficultyTier}`);
+            console.log(`[LMM Agent] Player Won! Increasing difficulty to Tier ${this.difficultyTier} `);
         } else if (lastResult.outcome === 'loss') {
             this.difficultyTier = Math.max(1, this.difficultyTier - 1);
-            console.log(`[LMM Agent] Player struggled. Decreasing difficulty to Tier ${this.difficultyTier}`);
+            console.log(`[LMM Agent] Player struggled.Decreasing difficulty to Tier ${this.difficultyTier} `);
         }
 
         // --- WORLD MODEL PROMPT CONSTRUCTION ---
@@ -194,20 +267,23 @@ Your goal is to design levels that test the player's understanding of this world
 ${this.physicsKnowledge}
 
 CURRENT CONTEXT:
-- Difficulty Tier: ${this.difficultyTier}
-- Player Status: ${lastResult.outcome === 'win' ? "Successfully mastered previous physics constraints." : "Failed to overcome environment challenges."}
-- Last Metadata: Duration ${historySummary?.duration}s, Events: ${JSON.stringify(historySummary?.events)}
+        - Difficulty Tier: ${this.difficultyTier}
+        - Player Status: ${lastResult.outcome === 'win' ? "Successfully mastered previous physics constraints." : "Failed to overcome environment challenges."}
+        - Last Metadata: Duration ${historySummary?.duration} s, Events: ${JSON.stringify(historySummary?.events)}
 
-TASK:
-Based on the Updated Laws of Physics (above) and the player's performance, generate a new 2D grid level.
+        TASK:
+Based on the Updated Laws of Physics(above) and the player's performance, generate a new 2D grid level.
 ${lastResult.outcome === 'win'
                 ? "CONSTRAINT: Introduce more complex arrangements of 'x' (walls) and '!' (lava) that require precise jump timing."
-                : "CONSTRAINT: Simplify the terrain. Reduce gap widths and lava hazards to allow for safer traversal."}
-`;
+                : "CONSTRAINT: Simplify the terrain. Reduce gap widths and lava hazards to allow for safer traversal."
+            }
+        `;
 
         console.log("--- GENERATED WORLD MODEL PROMPT ---");
-        console.log(prompt);
-        console.log("------------------------------------");
+        // Update Dashboard with thought process
+        this.appendReasoning("Constructing Mental Model...", "system-msg");
+        this.appendReasoning("Refining Physics Laws based on recent observations...", "physics-law");
+        this.appendReasoning("Generating new spatial configuration...", "system-msg");
 
         // Simulate "Thinking" delay
         await new Promise(r => setTimeout(r, 1000));
