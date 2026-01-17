@@ -108,7 +108,8 @@ class GameRecorder {
     async saveHistory() {
         const data = {
             ...this.getSummary(),
-            history: this.history
+            history: this.history,
+            physics_knowledge: window.lmmAgent ? window.lmmAgent.physicsKnowledge : "N/A"
         };
 
         try {
@@ -133,33 +134,21 @@ class LMMAgent {
     constructor() {
         this.difficultyTier = 1;
         this.physicsKnowledge = `
-You are the Architect of a 2D Platformer World.
-Your goal is to design levels that test the player's understanding of this world's physics.
+You are the World Model AI. You are learning the laws of this universe.
 
-### WORLD PHYSICS & LAWS
-1. **Gravity**: Acts downwards (Y+). The player falls if no block ('x') is beneath them.
+### CURRENT PHYSICS KNOWLEDGE (Iterative Learning Mode)
+1. **Gravity**: [HYPOTHESIS] Objects might fall down? (Status: UNVERIFIED)
 2. **Movement**: 
-   - Player ('@') moves Left/Right with velocity. 
-   - Jump: Impulse 'Up' (Y-). requires ground contact.
-   - Air Control: Movement is possible while airborne but momentum is conserved.
+   - [HYPOTHESIS] 'Arrow Keys' might control specific entities? (Status: UNVERIFIED)
+   - [HYPOTHESIS] Is jumping possible? (Status: UNVERIFIED)
 3. **Collision**:
-   - 'x' (Wall/Floor): Solid blocks. Blocks movement.
-   - '!' (Lava): Fatal on contact. Resets level/Life lost.
-   - 'o' (Coin): Collectible.
-   - ' ' (Empty): Passable air.
-4. **Dynamics**:
-   - Moving Lava ('=', '|', 'v'): Predictable linear motion.
-   - Wobble: Coins float and wobble slightly.
+   - 'x' blocks: Unknown properties.
+   - '!': Unknown properties.
+   - 'o': Unknown properties.
 
-### GRID SYMBOLOGY
-- @ : Player Start (Required)
-- x : Solid Block (Walls, Floor, Platforms)
-- ! : Static Lava (Hazard)
-- = : Horizontal Moving Lava
-- | : Vertical Moving Lava
-- v : Dripping Lava
-- o : Coin (Goal/Objective)
--   : Empty Space
+### OBJECTIVE
+Design levels to *test* and *refine* these hypotheses.
+Start with a blank slate. As the player interacts, we will Confirm or Reject these laws.
 `;
     }
 
@@ -181,20 +170,59 @@ Your goal is to design levels that test the player's understanding of this world
         let observation = "";
         const events = historySummary.events || [];
         const deaths = events.filter(e => e.type === 'death').length;
+        const coins = events.filter(e => e.type === 'coin').length;
         const duration = historySummary.duration || 0;
 
+        // --- SIMULATED LEARNING LOGIC ---
+        // In a real system, this would be the LLM analyzing the JSON trace.
+        // Here we simulate the "Aha!" moments based on simple heuristics.
+
+        let learnedNewLaw = false;
+        let newLawText = "";
+
+        if (this.difficultyTier === 1 && outcome === 'win') {
+            // Tier 1 Complete: Gravity and Movement basics confirmed
+            learnedNewLaw = true;
+            newLawText = `
+[UPDATE] Gravity: CONFIRMED. Acts downwards (Y+).
+[UPDATE] Movement: CONFIRMED. Player moves Left/Right on inputs.
+[UPDATE] Collision: 'x' blocks are SOLID. They stop gravity.
+`;
+            this.physicsKnowledge = this.physicsKnowledge
+                .replace("Gravity: [HYPOTHESIS] Objects might fall down? (Status: UNVERIFIED)", "Gravity: CONFIRMED. Acts downwards. (Status: VERIFIED)")
+                .replace("Collision:\n   - 'x' blocks: Unknown properties.", "Collision:\n   - 'x' blocks: SOLID. Ground support.");
+        }
+
+        if (coins > 0) {
+            this.physicsKnowledge = this.physicsKnowledge.replace("'o': Unknown properties.", "'o': COLLECTIBLE. Desirable objective.");
+            if (!learnedNewLaw) {
+                learnedNewLaw = true;
+                newLawText += "\n[UPDATE] 'o' (Coin) is beneficial/collectible.";
+            }
+        }
+
+        if (deaths > 0) {
+            this.physicsKnowledge = this.physicsKnowledge.replace("'!': Unknown properties.", "'!': FATAL. Avoid at all costs.");
+            if (!learnedNewLaw) {
+                learnedNewLaw = true;
+                newLawText += "\n[UPDATE] '!' (Lava) is DEADLY.";
+            }
+        }
+
         if (outcome === 'win') {
-            observation = `[OBSERVATION: Player Mastered this Level. Duration: ${duration.toFixed(1)}s. Deaths: ${deaths}. Conclusion: Physics laws concerning jump arc and gravity are understood.]`;
+            observation = `[OBSERVATION: Level Cleared. The agent (player) successfully navigated the environment. Existing physics models hold true.]`;
         } else {
-            observation = `[OBSERVATION: Player Failed Level. Duration: ${duration.toFixed(1)}s. Deaths: ${deaths}. Conclusion: Player struggled with environmental hazards. Potentially miscalculated gravity or collision bounds.]`;
+            observation = `[OBSERVATION: Level Failed. The agent failed to adapt to environmental constraints.]`;
         }
 
         // Dashboard Update
         this.appendReasoning(`Analysing Episode... Outcome: ${outcome}`, "system-msg");
         this.appendReasoning(observation, "observation");
 
-        // Simulating "Learning" by appending new knowledge
-        this.physicsKnowledge += "\n" + observation;
+        if (learnedNewLaw) {
+            this.appendReasoning("💡 NEW PHYSICAL LAW DISCOVERED!", "physics-law");
+            this.appendReasoning(newLawText.trim(), "physics-law");
+        }
     }
 
     printEpisodeSummary(historySummary, outcome) {
